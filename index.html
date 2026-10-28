@@ -298,6 +298,8 @@ t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,
 document,'script','https://connect.facebook.net/en_US/fbevents.js');
 fbq('init','1655466502887366');
 fbq('track','PageView');
+try{ var _q=new URLSearchParams(location.search),_t={}; _q.forEach(function(v,k){ if(k==="fbclid"||k.indexOf("utm_")===0) _t[k]=v; });
+  if(Object.keys(_t).length) sessionStorage.setItem("_track",JSON.stringify(_t)); }catch(e){}
 </script>
 <noscript><img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=1655466502887366&ev=PageView&noscript=1"/></noscript>
 </head>
@@ -321,7 +323,7 @@ fbq('track','PageView');
 const CONFIG = {
   /* A DÓNDE VAN LOS BOTONES DE COMPRA.
      REGLA DURA: el checkout tiene que cobrar exactamente CONFIG.precio, una sola vez. */
-  checkout: "https://protocolo-desinflamacion.impultienda.ar/checkout",   // checkout de ImpulTienda indicado por el usuario
+  checkout: "https://protocolodesinflamacion.impultienda.ar/checkout/opcion-1",   // checkout de ImpulTienda indicado por el usuario
 
   marca:    "Protocolo Desinflamación de Próstata",
   marcaTop: "Protocolo Desinflamación",
@@ -425,7 +427,22 @@ const D = {
   get descuento(){ return Math.round((1-CONFIG.precio/this.valorTotal)*100); }
 };
 const money = n => CONFIG.moneda + Math.round(n).toLocaleString("es-AR");
-const alCheckout = () => { try{ fbq("track","InitiateCheckout",{value:CONFIG.precio,currency:"ARS"}); }catch(e){} setTimeout(()=>{ window.location.href = CONFIG.checkout; },150); };
+const alCheckout = () => {
+  // Pasa fbclid + utm_* al checkout: ImpulTienda los lee en su dominio y arma el _fbc.
+  // Sin esto, la compra llega al pixel sin el clic del anuncio y Ads Manager no la atribuye.
+  let url = CONFIG.checkout;
+  try{
+    const q = new URLSearchParams(window.location.search), keep = new URLSearchParams();
+    try{ const g = JSON.parse(sessionStorage.getItem("_track")||"{}"); for(const k in g) keep.set(k,g[k]); }catch(e){}
+    q.forEach((v,k)=>{ if(k==="fbclid" || k.startsWith("utm_")) keep.set(k,v); });
+    const fbc = document.cookie.match(/(?:^|; )_fbc=([^;]*)/);
+    if(!keep.has("fbclid") && fbc){ const p = decodeURIComponent(fbc[1]).split("."); if(p.length>=4) keep.set("fbclid", p.slice(3).join(".")); }
+    const s = keep.toString(); if(s) url += (url.includes("?") ? "&" : "?") + s;
+  }catch(e){}
+  // InitiateCheckout lo dispara ImpulTienda al cargar el checkout (con event_id + CAPI). Acá solo el clic.
+  try{ fbq("trackCustom","ClicComprar",{value:CONFIG.precio,currency:"ARS"}); }catch(e){}
+  setTimeout(()=>{ window.location.href = url; },150);
+};
 
 /* ============================================================================
    ESTADO + utilidades
@@ -471,6 +488,8 @@ function render(){
   // al cambiar de pantalla se corta cualquier audio que esté sonando
   (window._audios||[]).forEach(x=>{ try{ x.pause(); x.currentTime=0; x.src=""; }catch(e){} }); window._audios=[];
   const p = P[S.i];
+  try{ window._vistos=window._vistos||{}; if(!window._vistos[S.i]){ window._vistos[S.i]=1;
+    fbq("trackCustom","Q"+String(S.i+1).padStart(2,"0")+"_"+p.id,{paso:S.i+1}); } }catch(e){}
   $("#top").classList.toggle("oculta", p.barra===false);
   $("#marcatop").innerHTML = LOGO_FULL(132);
   $("#barra").style.width = ((S.i)/(P.length-1)*100)+"%";
